@@ -2,18 +2,15 @@
 
 using namespace cv;
 
-motion_detector::motion_detector() {
+motion_detector_base::motion_detector_base() {
 	std::cout << "MotionDetector()" << std::endl;
-
-	//init()
 }
 
-motion_detector::~motion_detector() {
+motion_detector_base::~motion_detector_base() {
 	std::cout << "~MotionDetector()" << std::endl;
 }
 
-void motion_detector::init(const int64_t history, const int64_t threshold, const bool detect_shadows)
-{
+void motion_detector_base::init(const int64_t history, const int64_t threshold, const bool detect_shadows) {
 	if (!p_back_sub_.empty())
 		p_back_sub_.release();
 
@@ -21,8 +18,7 @@ void motion_detector::init(const int64_t history, const int64_t threshold, const
 	p_back_sub_->setShadowValue(0);
 }
 
-std::vector<cv::Rect> motion_detector::add_frame(const cv::Mat& frame)
-{
+std::vector<cv::Rect> motion_detector_base::add_frame(const cv::Mat& frame) {
 	Mat resized;
 
 	if (!frame.empty()) {
@@ -36,13 +32,21 @@ std::vector<cv::Rect> motion_detector::add_frame(const cv::Mat& frame)
 		p_back_sub_->getBackgroundImage(background_);
 		++background_frames_collected_;
 
-		// TODO find contours & rectangles
-		return std::vector<Rect>();
+		return find_bboxes(mask_);
 	}
 	return std::vector<Rect>();
 }
 
-const Mat& motion_detector::get_background() const
-{
+std::vector<cv::Rect> motion_detector_base::find_bboxes(const cv::Mat& mask) const {
+	std::vector<Rect> found_bboxes;
+	std::vector<std::vector<Point> > contours;
+	std::vector<Vec4i> hierarchy;
+	findContours(mask, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_NONE);
+	for (const auto& contour : contours)
+		found_bboxes.push_back(boundingRect(contour));
+	return found_bboxes;
+}
+
+const Mat& motion_detector_base::get_background() const {
 	return background_;
 }
