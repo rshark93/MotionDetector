@@ -14,8 +14,9 @@ void motion_detector_base::init(const int64_t history, const int64_t threshold, 
 	if (!p_back_sub_.empty())
 		p_back_sub_.release();
 
-	p_back_sub_ = createBackgroundSubtractorMOG2(history, threshold, detect_shadows);
-	p_back_sub_->setShadowValue(0);
+	auto sub = createBackgroundSubtractorMOG2(history, threshold, detect_shadows);
+	sub->setShadowValue(0);
+	p_back_sub_ = sub;
 }
 
 std::vector<cv::Rect> motion_detector_base::add_frame(const cv::Mat& frame) {
@@ -23,12 +24,16 @@ std::vector<cv::Rect> motion_detector_base::add_frame(const cv::Mat& frame) {
 
 	if (!frame.empty()) {
 		try {
-			resize(frame, resized, Size(frame.cols / scale_, frame.rows / scale_));
+			if (scale_ != 1) {
+				resize(frame, resized, Size(frame.cols / scale_, frame.rows / scale_));
+				resize(frame, resized, Size(frame.cols * scale_, frame.rows * scale_));
+			}
+			
 		} catch (std::invalid_argument& e) {
 			std::cout << "resize_add_frame_err!!!" << &e << std::endl;
 		}
 
-		p_back_sub_->apply(resized, mask_);
+		p_back_sub_->apply(frame /*resized*/, mask_);
 		p_back_sub_->getBackgroundImage(background_);
 		++background_frames_collected_;
 
@@ -41,12 +46,29 @@ std::vector<cv::Rect> motion_detector_base::find_bboxes(const cv::Mat& mask) con
 	std::vector<Rect> found_bboxes;
 	std::vector<std::vector<Point> > contours;
 	std::vector<Vec4i> hierarchy;
+
+	cv::GaussianBlur(mask, mask, Size(kernel_, kernel_), 0);
+	cv::threshold(mask, mask, 100, 255, THRESH_BINARY);
+	show_image(mask);
+	
 	findContours(mask, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_NONE);
-	for (const auto& contour : contours)
-		found_bboxes.push_back(boundingRect(contour));
+	for (const auto& contour : contours) {
+		auto rect = boundingRect(contour);
+		//scale_rect(rect);
+		found_bboxes.push_back(rect);
+	}
 	return found_bboxes;
 }
 
 const Mat& motion_detector_base::get_background() const {
 	return background_;
+}
+
+
+void motion_detector_base::scale_rect(cv::Rect &rect) const
+{
+	rect.x *= scale_;
+	rect.y /= scale_;
+	rect.width *= scale_;
+	rect.height *= scale_;	
 }
